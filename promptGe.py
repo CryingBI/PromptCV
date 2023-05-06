@@ -31,7 +31,10 @@ class promptGe(nn.Module):
             self.prompt_key = prompt_mean
         
         self.task_embed = None
-        self.generation = nn.Linear(,,,)
+        task_len = self.task_embed.shape[1]
+        self.generation_layer_1 = nn.Linear(768, 256, bias=True)
+        self.generation_activation = nn.Relu()
+        self.generation_layer_2 = nn.Linear(256, 768*5, bias=True)
 
     def forward(self, x_embed, prompt_mask=None, cls_features=None):
         out = dict()
@@ -73,6 +76,9 @@ class promptGe(nn.Module):
             else:
                 idx = prompt_mask # B, top_k
 
-        a = self.generation
+        x_task_embed = torch.cat((x_embed, self.task_embed), dim=1)
+        a = self.generation_layer_1(x_task_embed)
+        b = self.generation_activation(a)
+        c = self.generation_layer_2(b)
 
         

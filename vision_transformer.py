@@ -207,7 +207,7 @@ class Attention(nn.Module):
 
     def forward(self, x):
         B, N, C = x.shape
-        print(B, N, C)
+        #print(B, N, C)
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         q, k, v = qkv.unbind(0)   # make torchscript happy (cannot use tensor as tuple)
 
