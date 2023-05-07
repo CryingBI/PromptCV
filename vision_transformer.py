@@ -457,7 +457,9 @@ class VisionTransformer(nn.Module):
 
     def forward_features(self, x, task_id=-1, cls_features=None, train=False):
         x = self.patch_embed(x)
-
+        print(x.shape)
+        print("Done!")
+        exit()
         if hasattr(self, 'prompt'):
             if self.use_prompt_mask and train:
                 start = task_id * self.prompt.top_k
