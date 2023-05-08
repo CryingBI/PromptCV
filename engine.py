@@ -50,11 +50,12 @@ def train_one_epoch(model: torch.nn.Module, original_model: torch.nn.Module,
             if original_model is not None:
                 output = original_model(input)
                 cls_features = output['pre_logits']
-                print(output)
+                print(output[x].shape)
                 print("OK1")
-                print(cls_features.shape)
+                print(output[logits].shape)
                 print("OK2")
                 exit()
+                #output is dict with x, pre_logits, logit key, and cls_features [16, 768]
             else:
                 cls_features = None
         
