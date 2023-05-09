@@ -41,6 +41,7 @@ from timm.models.layers import PatchEmbed, Mlp, DropPath, trunc_normal_, lecun_n
 from timm.models.registry import register_model
 
 from prompt import Prompt
+from promptGe import promptGe
 
 _logger = logging.getLogger(__name__)
 
@@ -384,19 +385,19 @@ class VisionTransformer(nn.Module):
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim)) if class_token else None
         embed_len = num_patches if no_embed_class else num_patches + self.num_prefix_tokens
-        if prompt_length is not None and pool_size is not None and prompt_pool:
-            embed_len += prompt_length * top_k
+
+        # if prompt_length is not None and pool_size is not None and prompt_pool:
+        #     embed_len += prompt_length * top_k
+
         self.pos_embed = nn.Parameter(torch.randn(1, embed_len, embed_dim) * .02)
         self.pos_drop = nn.Dropout(p=drop_rate)
 
-        self.prompt_pool = prompt_pool
+        # self.prompt_pool = prompt_pool
         self.head_type = head_type
         self.use_prompt_mask = use_prompt_mask
         
-        if prompt_length is not None and pool_size is not None and prompt_pool: 
-            self.prompt = Prompt(length=prompt_length, embed_dim=embed_dim, embedding_key=embedding_key, prompt_init=prompt_init,
-                    prompt_pool=prompt_pool, prompt_key=prompt_key, pool_size=pool_size, top_k=top_k, batchwise_prompt=batchwise_prompt,
-                    prompt_key_init=prompt_key_init,)
+        #use Generation Prompt 
+        self.prompt = promptGe(length=prompt_length, embed_dim=embed_dim, batchwise_prompt=batchwise_prompt)
 
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
         self.blocks = nn.Sequential(*[
@@ -469,7 +470,7 @@ class VisionTransformer(nn.Module):
                     prompt_mask = None
             else:
                 prompt_mask = None
-            res = self.prompt(x, prompt_mask=prompt_mask, cls_features=cls_features)
+            res = self.prompt(x, task_id=task_id, prompt_mask=prompt_mask, cls_features=cls_features)
             self.total_prompt_len = res['total_prompt_len']
             x = res['prompted_embedding']
         else:

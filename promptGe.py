@@ -7,25 +7,33 @@ class promptGe(nn.Module):
 
         self.length = length
         self.embed_dim = embed_dim
-        self.batchwise_prompt = batchwise_prompt
 
+        self.task_embed_layer = nn.Embedding(10, self.embed_dim)
 
         #Generation network
         self.generation_layer_1 = nn.Linear(768, 256, bias=True)
         self.generation_activation = nn.Relu()
         self.generation_layer_2 = nn.Linear(256, 768*5, bias=True)
 
-    def forward(self, x_embed, prompt_mask=None, cls_features=None):
+    def forward(self, x_embed, task_id=None, prompt_mask=None, cls_features=None):
         out = dict()
 
-        self.task_embed_layer = nn.Embedding(10, self.embed_dim)
-        self.task_embed = torch.zeros(1, 1, self.embed_dim)
-        m = self.task_embed.expand(x_embed.shape[0], -1, -1)
+        task_embed = torch.Tensor([task_id])
+        m = task_embed.expand(x_embed.shape[0], -1)
         n = self.task_embed_layer(m)
 
         x_task_embed = torch.cat((x_embed, n), dim=1)
         a = self.generation_layer_1(x_task_embed)
         b = self.generation_activation(a)
-        c = self.generation_layer_2(b)
+        batched_prompt_raw = self.generation_layer_2(b)     # B, length, C * 5
 
+        prompt_1 = batched_prompt_raw[:, :, :768]
+        prompt_2 = batched_prompt_raw[:, :, 768:768*2]
+        prompt_3 = batched_prompt_raw[:, :, 768*2:768*3]
+        prompt_4 = batched_prompt_raw[:, :, 768*3:768*4]
+        prompt_5 = batched_prompt_raw[:, :, 768*4:768*5]
+
+        out['total_prompt_len'] = 5
+        out['prompted_embedding'] = torch.cat([prompt_1, prompt_2, prompt_3, prompt_4, prompt_5, x_embed], dim=1)
+        return out
         
