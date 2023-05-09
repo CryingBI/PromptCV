@@ -72,7 +72,7 @@ class Prompt(nn.Module):
                     prompt_id, id_counts = torch.unique(idx, return_counts=True, sorted=True)
                     # In jnp.unique, when the 'size' is specified and there are fewer than the indicated number of elements,
                     # the remaining elements will be filled with 'fill_value', the default is the minimum value along the specified dimension.
-                    # Unless dimension is specified, this will be flattend if it is not already 1D.
+                    # Unless dimension is specified, this will be flattend               if it is not already 1D.
                     if prompt_id.shape[0] < self.pool_size:
                         prompt_id = torch.cat([prompt_id, torch.full((self.pool_size - prompt_id.shape[0],), torch.min(idx.flatten()), device=prompt_id.device)])
                         id_counts = torch.cat([id_counts, torch.full((self.pool_size - id_counts.shape[0],), 0, device=id_counts.device)])

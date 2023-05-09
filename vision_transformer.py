@@ -496,7 +496,7 @@ class VisionTransformer(nn.Module):
             x = x[:, 0]
         elif self.head_type == 'gap' and self.global_pool == 'avg':
             x = x.mean(dim=1)
-        elif self.head_type == 'prompt' and self.prompt_pool:
+        elif self.head_type == 'prompt':
             x = x[:, 1:(1 + self.total_prompt_len)] if self.class_token else x[:, 0:self.total_prompt_len]
             x = x.mean(dim=1)
         elif self.head_type == 'token+prompt' and self.prompt_pool and self.class_token:
