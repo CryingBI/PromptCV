@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class promptGe(nn.Module):
-    def __init__(self, length=1, embed_dim=768, batchwise_prompt=False):
+    def __init__(self, length=1, embed_dim=768):
         super().__init__()
 
         self.length = length

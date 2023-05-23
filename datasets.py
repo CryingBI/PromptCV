@@ -42,7 +42,7 @@ def build_continual_dataloader(args):
 
         args.nb_classes = len(dataset_val.classes)
 
-        splited_dataset, class_mask = split_single_dataset(dataset_train, dataset_val, args)
+        splited_dataset, class_mask, _ = split_single_dataset(dataset_train, dataset_val, args)
     else:
         if args.dataset == '5-datasets':
             dataset_list = ['SVHN', 'MNIST', 'CIFAR10', 'NotMNIST', 'FashionMNIST']
@@ -164,15 +164,18 @@ def split_single_dataset(dataset_train, dataset_val, args):
     labels = [i for i in range(nb_classes)]
     
     split_datasets = list()
+    split_datasets_each_class = list()
     mask = list()
+    
 
     if args.shuffle:
         random.shuffle(labels)
 
-    for _ in range(args.num_tasks):
+    for i in range(args.num_tasks):
         train_split_indices = []
         test_split_indices = []
-        
+        prototype_each_class_indices = []
+
         scope = labels[:classes_per_task]
         labels = labels[classes_per_task:]
 
@@ -186,11 +189,22 @@ def split_single_dataset(dataset_train, dataset_val, args):
             if int(dataset_val.targets[h]) in scope:
                 test_split_indices.append(h)
         
-        subset_train, subset_val =  Subset(dataset_train, train_split_indices), Subset(dataset_val, test_split_indices)
+        for m in scope:
+            for k in range(len(dataset_val.targets)):
+                if int(dataset_val.targets[k]) == m:
+                    prototype_each_class_indices.append(k)
 
+        subset_train, subset_val =  Subset(dataset_train, train_split_indices), Subset(dataset_val, test_split_indices)
+        prototype_train_each_class_raw = Subset(dataset_val, prototype_each_class_indices)
+
+        for j in range(10):
+            indice_for_each_class = list(range(j*100, (j+1)*100))
+            prototype_train_each_class = Subset(prototype_train_each_class_raw, indice_for_each_class)
+            #print(vars(prototype_train_each_class))
+            split_datasets_each_class.append(prototype_train_each_class)
         split_datasets.append([subset_train, subset_val])
     
-    return split_datasets, mask
+    return split_datasets, mask, split_datasets_each_class
 
 def build_transform(is_train, args):
     resize_im = args.input_size > 32
@@ -214,3 +228,40 @@ def build_transform(is_train, args):
     t.append(transforms.ToTensor())
     
     return transforms.Compose(t)
+
+def build_prototype_for_each_class(args):
+    dataloader_class = list()
+    #class_mask = list() if args.task_inc or args.train_mask else None
+
+    transform_train = build_transform(True, args)
+    transform_val = build_transform(False, args)
+
+    if args.dataset.startswith('Split-'):
+        dataset_train, dataset_val = get_dataset(args.dataset.replace('Split-',''), transform_train, transform_val, args)
+
+        args.nb_classes = len(dataset_val.classes)
+
+        _, _, split_datasets_each_class = split_single_dataset(dataset_train, dataset_val, args)
+    
+    for i in range(args.nb_classes):
+        if args.dataset.startswith('Split-'):
+            dataset_train_each_class = split_datasets_each_class[i]
+            
+        if args.distributed and utils.get_world_size() > 1:
+            num_tasks = utils.get_world_size()
+            global_rank = utils.get_rank()
+
+            sampler_train = torch.utils.data.DistributedSampler(
+                dataset_train_each_class, num_replicas=num_tasks, rank=global_rank, shuffle=True)
+        else:
+            sampler_train = torch.utils.data.RandomSampler(dataset_train_each_class)
+        data_loader_each_class = torch.utils.data.DataLoader(
+            dataset_train_each_class, sampler=sampler_train,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            pin_memory=args.pin_mem,
+        )
+        dataloader_class.append({'val': data_loader_each_class})
+    
+    return dataloader_class #class_mask
+

@@ -23,8 +23,35 @@ import numpy as np
 
 from timm.utils import accuracy
 from timm.optim import create_optimizer
-
+from datasets import build_prototype_for_each_class
 import utils
+
+@torch.no_grad()
+def get_prototypes(original_model: torch.nn.Module, data_loader, 
+            device, args):
+    
+    prototypes_list = []
+
+    original_model.eval()
+    
+    with torch.no_grad():
+
+        for input, target in data_loader:
+            input = input.to(device, non_blocking=True)
+            target = target.to(device, non_blocking=True)
+
+            #take prototypes
+            output = original_model.forward_features(input)
+            prototype = output['x']
+            prototypes_list.append(prototype)
+
+        prototypes_list = torch.cat(prototypes_list, dim = 0)
+
+        proto = torch.mean(prototypes_list, dim=0, keepdim=True)
+
+    return proto
+
+
 
 def train_one_epoch(model: torch.nn.Module, original_model: torch.nn.Module, 
                     criterion, data_loader: Iterable, optimizer: torch.optim.Optimizer,
@@ -43,6 +70,8 @@ def train_one_epoch(model: torch.nn.Module, original_model: torch.nn.Module,
     header = f'Train: Epoch[{epoch+1:{int(math.log10(args.epochs))+1}}/{args.epochs}]'
     
     for input, target in metric_logger.log_every(data_loader, args.print_freq, header):
+        # print(input.shape)
+        # print("OK")
         input = input.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
 
@@ -266,3 +295,47 @@ def train_and_evaluate(model: torch.nn.Module, model_without_ddp: torch.nn.Modul
         if args.output_dir and utils.is_main_process():
             with open(os.path.join(args.output_dir, '{}_stats.txt'.format(datetime.datetime.now().strftime('log_%Y_%m_%d_%H_%M'))), 'a') as f:
                 f.write(json.dumps(log_stats) + '\n')
+
+
+
+def training(model: torch.nn.Module, model_without_ddp: torch.nn.Module, original_model: torch.nn.Module, 
+                    criterion, data_loader: Iterable, optimizer: torch.optim.Optimizer, lr_scheduler, device: torch.device, 
+                    class_mask=None, args = None,):
+    
+    for task_id in range(args.num_tasks):
+        for epoch in range(args.epochs):            
+            train_stats = train_one_epoch(model=model, original_model=original_model, criterion=criterion, 
+                                        data_loader=data_loader[task_id]['train'], optimizer=optimizer, 
+                                        device=device, epoch=epoch, max_norm=args.clip_grad, 
+                                        set_training_mode=True, task_id=task_id, class_mask=class_mask, args=args,)
+            
+            if lr_scheduler:
+                lr_scheduler.step(epoch)
+
+
+@torch.no_grad()
+def evaluate_new(model: torch.nn.Module, original_model: torch.nn.Module, data_loader, 
+            device, prototype_list, task_id=-1, class_mask=None, args=None, ):
+    
+    criterion = torch.nn.CrossEntropyLoss()
+
+    metric_logger = utils.MetricLogger(delimiter="  ")
+    header = 'Test: [Task {}]'.format(task_id + 1)
+
+    #take prototype before training
+    prototype_list = list()
+    data_loader_for_each_class = build_prototype_for_each_class(args)
+    for i in range(100):
+        proto = get_prototypes(original_model, data_loader_for_each_class[i]['val'], args.device, args)
+        prototype_list.append(proto)
+    
+    #take prototype after training
+    prototype_list_after_train = list()
+    data_loader_for_each_class_2 = build_prototype_for_each_class(args)
+    for i in range(100):
+        proto = get_prototypes(model, data_loader_for_each_class[i]['val'], args.device, args)
+        prototype_list_after_train.append(proto)
+        
+    # switch to evaluation mode
+    model.eval()
+    original_model.eval()
